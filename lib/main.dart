@@ -1,10 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_sound/flutter_sound.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:sizer/sizer.dart';
 import 'package:voice_message_package/voice_message_package.dart';
-import 'package:flutter_sound/flutter_sound.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 
 void main() => runApp(const MyApp());
 
@@ -37,6 +39,8 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
   bool _recorderIsInitialized = false;
   List<String> _recordedFiles = [];
   String? _playingFilePath;
+  Timer? _timer;
+  Duration _duration = Duration.zero;
 
   @override
   void initState() {
@@ -67,6 +71,11 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
     await _recorder.startRecorder(toFile: path);
     setState(() {
       _isRecording = true;
+      _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+        setState(() {
+          _duration = Duration(seconds: _duration.inSeconds + 1);
+        });
+      });
     });
   }
 
@@ -80,6 +89,8 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
       setState(() {
         _isRecording = false;
         _recordedFiles.add(filePath);
+        _timer?.cancel();
+        _duration = Duration.zero;
       });
     }
   }
@@ -106,6 +117,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
   void dispose() {
     _recorder.closeRecorder();
     _player.closePlayer();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -118,11 +130,11 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(height: 10.h),
-            ElevatedButton(
+            RecordButton(
+              isRecording: _isRecording,
               onPressed: _isRecording ? _stopRecording : _startRecording,
-              child: Text(_isRecording ? 'Stop Recording' : 'Start Recording'),
+              duration: _isRecording ? _duration : null,
             ),
-            SizedBox(height: 2.h),
             if (_recordedFiles.isNotEmpty)
               ..._recordedFiles.map((filePath) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -144,5 +156,43 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
         ),
       ),
     );
+  }
+}
+
+class RecordButton extends StatelessWidget {
+  final bool isRecording;
+  final Function() onPressed;
+  final Duration? duration;
+
+  const RecordButton({
+    Key? key,
+    required this.isRecording,
+    required this.onPressed,
+    this.duration,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(
+        isRecording ? Icons.stop : Icons.mic,
+        color: isRecording ? Colors.red : null,
+      ),
+      label: duration != null ? Text(durationToString(duration!)) : Text('Start Recording'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isRecording ? Colors.white : null,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(30),
+        ),
+      ),
+    );
+  }
+
+  String durationToString(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$twoDigitMinutes:$twoDigitSeconds";
   }
 }
